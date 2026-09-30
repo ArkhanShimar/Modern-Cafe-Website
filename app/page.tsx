@@ -1,41 +1,100 @@
 "use client";
-import {useCallback,useEffect,useRef,useState} from 'react';
-import gsap from 'gsap';
-import {ScrollTrigger} from 'gsap/ScrollTrigger';
-import Lenis from 'lenis';
-import {ArrowUpRight,ArrowDown,ChevronLeft,ChevronRight,Plus,Minus} from 'lucide-react';
-import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
-import World,{type SceneState} from './World';
-const flavours=[{name:'Strawberry Cream',note:'Real strawberry. Velvet cream. Ice-cold obsession.',price:6.5,tag:'BRIGHT · VELVETY · JOYFUL',color:'#e9a49c'},{name:'Caramel Cloud',note:'Golden caramel. Silky milk. A little above ordinary.',price:6.8,tag:'GOLDEN · SILKY · INDULGENT',color:'#cea46c'},{name:'Dark Mocha',note:'Deep espresso. Dark chocolate. Beautifully bold.',price:6.8,tag:'RICH · DARK · UNFORGETTABLE',color:'#b18a73'}];
-const chapters=['The first sip','The real thing','Find your flavour','Our craft','The menu','A moment for you','Your next favourite'];
-export default function Home(){
- const root=useRef<HTMLDivElement>(null),state=useRef<SceneState>({progress:0,flavour:0,reduced:false}),lenis=useRef<Lenis|null>(null);
- const [flavour,setFlavour]=useState(0),[chapter,setChapter]=useState(0),[loading,setLoading]=useState(0),[ready,setReady]=useState(false),[modal,setModal]=useState<'order'|'locations'|null>(null),[quantity,setQuantity]=useState(1);const drag=useRef(0);
- const onProgress=useCallback((v:number)=>setLoading(v),[]);
- useEffect(()=>{state.current.flavour=flavour;},[flavour]);
- useEffect(()=>{if(loading===100){const timer=setTimeout(()=>setReady(true),450);return()=>clearTimeout(timer);}},[loading]);
- useEffect(()=>{gsap.registerPlugin(ScrollTrigger);state.current.reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;const smooth=new Lenis({duration:1.2,smoothWheel:!state.current.reduced});lenis.current=smooth;smooth.on('scroll',ScrollTrigger.update);const tick=(time:number)=>smooth.raf(time*1000);gsap.ticker.add(tick);gsap.ticker.lagSmoothing(0);
- const panels=Array.from(document.querySelectorAll<HTMLElement>('.scene'));const photo=document.querySelector<HTMLElement>('.hero-photo')!,shade=document.querySelector<HTMLElement>('.hero-shade')!,ambient=document.querySelector<HTMLElement>('.ambient')!;
- const update=(progress:number)=>{state.current.progress=progress;const p=progress*6;setChapter(Math.round(p));panels.forEach((el,i)=>{const d=p-i,opacity=Math.max(0,1-Math.abs(d)*1.65);el.style.opacity=String(opacity);el.style.visibility=opacity>.015?'visible':'hidden';el.style.pointerEvents=opacity>.55?'auto':'none';el.style.transform=state.current.reduced?'none':`translate3d(0,${-d*55}px,${-Math.abs(d)*80}px)`;el.inert=opacity<.55;});photo.style.opacity=String(Math.max(0,1-p*1.5));photo.style.transform=`scale(${1.025+p*.12}) rotate(${p*-2}deg)`;shade.style.opacity=String(Math.max(0,1-p));ambient.style.opacity=String(Math.min(1,p*1.2));root.current?.style.setProperty('--journey',String(progress));};
- const trigger=ScrollTrigger.create({trigger:root.current,start:'top top',end:'bottom bottom',onUpdate:s=>update(s.progress)});update(trigger.progress);return()=>{trigger.kill();smooth.destroy();gsap.ticker.remove(tick);};},[]);
- const go=(n:number)=>{const target=(document.documentElement.scrollHeight-innerHeight)*n/6;lenis.current?.scrollTo(target,{duration:state.current.reduced?0:1.7});};
- const change=(n:number)=>setFlavour((n+3)%3);
- return <div ref={root} className={`journey flavour-${flavour} phase-${chapter} ${ready?'is-ready':''}`} style={{'--accent':flavours[flavour].color} as React.CSSProperties}>
- <a className="skip-link" href="#menu" onClick={e=>{e.preventDefault();go(4);}}>Skip to menu</a>
- <div className="experience">
- <div className="ambient"/><div className="hero-photo"/><div className="hero-shade"/><div className="cafe-glow" style={{opacity:Math.max(0,1-Math.abs(chapter-5))}}/><World state={state} onProgress={onProgress}/><div className="grain"/>
- <header className="nav"><a className="wordmark" href="#home" onClick={e=>{e.preventDefault();go(0);}}>LUME<span>CAFE</span></a><nav aria-label="Main navigation"><a href="#menu" onClick={e=>{e.preventDefault();go(4);}}>Menu</a><a href="#craft" onClick={e=>{e.preventDefault();go(3);}}>Our story</a><button onClick={()=>setModal('locations')}>Locations</button></nav><button className="order" onClick={()=>{go(4);setModal('order');}}>Order a little joy <ArrowUpRight size={16}/></button></header>
- <section className="scene scene-hero" id="home" aria-label="Welcome to LUME"><div className="hero-copy"><div className="eyebrow">✦ &nbsp; A LITTLE LUME. A LOT TO LOVE.</div><h1>CRAFTED<br/>TO <em>CRAVE.</em></h1><p>Good days start with something extraordinary.<br/>Meet your new everyday obsession.</p><button className="primary" onClick={()=>go(1)}>Explore the flavour <ArrowUpRight size={18}/></button></div><div className="hero-note"><span>THE SEASON’S MAIN CHARACTER</span><strong>Strawberry Cream</strong><p>Real fruit. Unreal feeling.</p></div></section>
- <section className="scene ingredient-scene" aria-label="Strawberry ingredients"><div className="scene-copy"><div className="eyebrow">01 / NOTHING ARTIFICIAL ABOUT THIS FEELING</div><h2>STRAWBERRY.<br/><em>REIMAGINED.</em></h2><p>Real strawberry. Velvet cream.<br/>Ice-cold obsession.</p><span className="fine-line">Made with real fruit. Finished with a little magic.</span></div><div className="ingredient-label label-one">01 — REAL STRAWBERRY</div><div className="ingredient-label label-two">02 — VELVET CREAM</div><div className="ingredient-label label-three">03 — CRUSHED ICE</div></section>
- <section className="scene flavour-scene" id="flavours" aria-label="Choose a flavour" onPointerDown={e=>drag.current=e.clientX} onPointerUp={e=>{if(Math.abs(e.clientX-drag.current)>55)change(flavour+(e.clientX<drag.current?1:-1));}}><div className="scene-copy"><div className="eyebrow">THREE MOODS. ONE LITTLE OBSESSION.</div><h2>FOLLOW<br/>YOUR <em>CRAVING.</em></h2><div className="flavour-detail" key={flavour}><span className="eyebrow">{flavours[flavour].tag}</span><h3>{flavours[flavour].name}</h3><p>{flavours[flavour].note}</p></div><div className="flavour-controls"><button className="circle" aria-label="Previous flavour" onClick={()=>change(flavour-1)}><ChevronLeft size={18}/></button>{flavours.map((f,i)=><button key={f.name} className={`swatch ${i===flavour?'selected':''}`} style={{'--swatch':f.color} as React.CSSProperties} aria-label={f.name} aria-pressed={i===flavour} onClick={()=>change(i)}/>) }<button className="circle" aria-label="Next flavour" onClick={()=>change(flavour+1)}><ChevronRight size={18}/></button></div><small>DRAG TO DISCOVER · {String(flavour+1).padStart(2,'0')} / 03</small></div></section>
- <section className="scene craft-scene" id="craft" aria-label="Our craft"><span className="eyebrow">THE LUME WAY</span><h2>NOT JUST COFFEE.<br/><em>A SMALL DAILY<br/>OBSESSION.</em></h2><p>Thoughtfully sourced. Slowly perfected.<br/>From the first bean to the last swirl, we make<br/>the everyday feel a little extraordinary.</p><span className="craft-caption">GOOD INGREDIENTS. GOOD INTENTIONS. REALLY GOOD COFFEE.</span></section>
- <section className="scene menu-scene" id="menu" aria-label="Our menu"><div className="menu-heading"><span className="eyebrow">YOUR USUAL. JUST BETTER.</span><h2>A GOOD <em>MOOD,</em> SERVED.</h2><p>Three signatures. Endless reasons to come back.</p></div><div className="products">{flavours.map((f,i)=><button className={`product product-${i}`} key={f.name} onClick={()=>{change(i);setQuantity(1);setModal('order');}} onPointerMove={e=>{const b=e.currentTarget.getBoundingClientRect();e.currentTarget.style.setProperty('--tilt',`${(e.clientX-b.left-b.width/2)/22}deg`);}} onPointerLeave={e=>e.currentTarget.style.setProperty('--tilt','0deg')}><div className="product-halo"/><img src="/cup.png" alt={`${f.name} frappé in a LUME cup`}/><div className="product-caption"><div><span>0{i+1} / SIGNATURE FRAPPÉ</span><h3>{f.name}</h3></div><span className="price">${f.price.toFixed(2)} <Plus size={16}/></span></div></button>)}</div><small className="menu-footnote">Illustrative menu & prices · Ask your barista about allergens.</small></section>
- <section className="scene cafe-scene" id="cafe" aria-label="The café experience"><span className="eyebrow">SOME PLACES JUST FEEL LIKE YOU.</span><h2>STAY A LITTLE<br/><em>LONGER.</em></h2><p>A warm corner. Your favourite cup.<br/>Nowhere else you need to be.</p><button className="text-link" onClick={()=>setModal('locations')}>Find your little escape <ArrowUpRight size={18}/></button><div className="steam steam-one"/><div className="steam steam-two"/></section>
- <section className="scene final-scene" aria-label="Your next favourite"><div className="final-heading"><span className="eyebrow">SEE YOU FOR THE NEXT SIP.</span><h2>YOUR NEXT<br/><em>FAVOURITE.</em></h2></div><div className="final-actions"><button className="primary" onClick={()=>setModal('locations')}>Find a LUME <ArrowUpRight size={17}/></button><button className="text-link" onClick={()=>go(4)}>View menu <ArrowUpRight size={17}/></button></div><footer><span>© {new Date().getFullYear()} LUME CAFE</span><span>A LITTLE LUME. EVERY DAY.</span><button onClick={()=>go(0)}>Back to the first sip ↑</button></footer></section>
- <div className="bottom-bar"><button onClick={()=>go(Math.min(chapter+1,6))}>SCROLL TO SAVOUR <ArrowDown size={14}/></button><span>{String(chapter+1).padStart(2,'0')} — {chapters[chapter]?.toUpperCase()}</span><div className="chapter-dots">{chapters.map((c,i)=><button key={c} aria-label={`Go to ${c}`} aria-current={chapter===i?'step':undefined} className={chapter===i?'active':''} onClick={()=>go(i)}/>)}</div></div><div className="progress-line"/>
- </div>
- {!ready&&<div className={`loader ${loading===100?'loaded':''}`} role="status" aria-label={`Loading ${loading}%`}><span className="wordmark">LUME<span>CAFE</span></span><div className="loading-product"><img src="/cup.png" alt=""/><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="92"/><circle className="liquid-ring" cx="100" cy="100" r="92" strokeDasharray="578" strokeDashoffset={578*(1-loading/100)}/></svg></div><span>{loading}%</span><p>A LITTLE GOOD IS ON ITS WAY.</p></div>}
- <Dialog open={modal!==null} onOpenChange={open=>{if(!open)setModal(null);}}><DialogContent className="lume-dialog"><DialogTitle>{modal==='locations'?'Your next little escape.':'Make it your favourite.'}</DialogTitle><DialogDescription>{modal==='locations'?'LUME is a café concept, with a real love for the everyday ritual.':'Build your order preview. Online ordering is coming soon.'}</DialogDescription>{modal==='locations'?<div className="location-content"><span className="eyebrow">GOOD THINGS ARE BREWING</span><h3>A LUME near you.<br/>Coming soon.</h3><p>Our first café locations and opening hours will appear here when announced.</p><button className="primary" onClick={()=>{setModal(null);go(4);}}>Explore the menu <ArrowUpRight size={17}/></button></div>:<div className="order-content"><label htmlFor="drink">Your flavour</label><select id="drink" value={flavour} onChange={e=>change(Number(e.target.value))}>{flavours.map((f,i)=><option key={f.name} value={i}>{f.name} — ${f.price.toFixed(2)}</option>)}</select><p>{flavours[flavour].note}</p><div className="quantity"><button aria-label="Decrease quantity" disabled={quantity===1} onClick={()=>setQuantity(Math.max(1,quantity-1))}><Minus size={16}/></button><span>{quantity}</span><button aria-label="Increase quantity" disabled={quantity===10} onClick={()=>setQuantity(Math.min(10,quantity+1))}><Plus size={16}/></button><strong>${(quantity*flavours[flavour].price).toFixed(2)}</strong></div><p className="order-message">A taste of what’s coming. This is a preview menu; no payment is taken and no order is placed.</p></div>}</DialogContent></Dialog>
- </div>;
-}
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowUpRight, ArrowDown, ChevronLeft, ChevronRight, Plus, Minus, Sun, Moon, ShoppingBag, MapPin, Clock, Copy, Check, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import type { SceneState } from './World';
+import CafeMenu from './CafeMenu';
+import LoadingRitual from './LoadingRitual';
+import CraftStory from './CraftStory';
+import { useJourney } from './use-journey';
+import { cafe, chapters, flavours, menu, rupees, type Bag, type MenuItem } from './cafe-data';
+const World = lazy(() => import('./World'));
 
+export default function Home() {
+  const root = useRef<HTMLDivElement>(null);
+  const state = useRef<SceneState>({ progress: 0, flavour: 0, reduced: false, light: false });
+  const [flavour, setFlavour] = useState(0), [chapter, setChapter] = useState(0);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [loading, setLoading] = useState(0), [ready, setReady] = useState(false);
+  const [modal, setModal] = useState<'order' | 'visit' | null>(null);
+  const [bag, setBag] = useState<Bag>({}), [storageReady, setStorageReady] = useState(false);
+  const [lastAdded, setLastAdded] = useState<string | null>(null), [copied, setCopied] = useState(false), [copyFallback, setCopyFallback] = useState('');
+  const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null), pointerStart = useRef<number | null>(null);
+  const onProgress = useCallback((value: number) => setLoading(value), []);
+  const { go, lenis } = useJourney(root, state, setChapter);
+  useEffect(() => { state.current.flavour = flavour; }, [flavour]);
+  useEffect(() => {
+    setTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+    try { const saved: unknown = JSON.parse(localStorage.getItem('lume-bag') || '{}'); if (saved && typeof saved === 'object') { const valid: Bag = {}; for (const item of menu) { const count = (saved as Bag)[item.id]; if (Number.isInteger(count) && count > 0 && count <= 10) valid[item.id] = count; } setBag(valid); } } catch { /* Storage is optional. */ }
+    setStorageReady(true);
+    return () => { if (addedTimer.current) clearTimeout(addedTimer.current); };
+  }, []);
+  useEffect(() => { state.current.light = theme === 'light'; document.documentElement.dataset.theme = theme; try { localStorage.setItem('lume-theme', theme); } catch {} }, [theme]);
+  useEffect(() => { if (storageReady) { try { localStorage.setItem('lume-bag', JSON.stringify(bag)); } catch {} } setCopied(false); setCopyFallback(''); }, [bag, storageReady]);
+  const finishLoading = useCallback(() => setReady(true), []);
+  useEffect(() => { if (modal || !ready) lenis.current?.stop(); else lenis.current?.start(); }, [modal, ready, lenis]);
+  const changeFlavour = (value: number) => setFlavour((value + flavours.length) % flavours.length);
+  const add = (item: MenuItem) => { setBag(previous => ({ ...previous, [item.id]: Math.min(10, (previous[item.id] || 0) + 1) })); setLastAdded(item.id); if (addedTimer.current) clearTimeout(addedTimer.current); addedTimer.current = setTimeout(() => setLastAdded(null), 2400); };
+  const quantity = (id: string, delta: number) => setBag(previous => { const next = { ...previous }; next[id] = Math.min(10, Math.max(0, (next[id] || 0) + delta)); if (!next[id]) delete next[id]; return next; });
+  const selected = menu.filter(item => bag[item.id]);
+  const count = selected.reduce((sum, item) => sum + bag[item.id], 0);
+  const total = selected.reduce((sum, item) => sum + bag[item.id] * item.price, 0);
+  const copyOrder = async () => { const text = `LUME CAFE · My café order\n\n${selected.map(item => `${bag[item.id]} × ${item.name} — ${rupees(bag[item.id] * item.price)}`).join('\n')}\n\nTotal: ${rupees(total)}\nFor ordering at the café; not an online order.`; try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopyFallback(text); } };
+  const current = flavours[flavour];
+  const customStyle = { '--accent-dark': current.accent, '--accent-light': current.lightAccent, '--glow-rgb': current.glow } as React.CSSProperties;
+  return <div ref={root} className={`journey phase-${chapter} flavour-${flavour} ${ready ? 'is-ready' : ''}`} style={customStyle}>
+    <a className="skip-link" href="#menu" onClick={event => { event.preventDefault(); go(4); }}>Skip to menu</a>
+    <div className="experience" inert={!ready}>
+      <div className="atmosphere" aria-hidden="true"><div className="flavour-glow" /></div>
+      <div className="craft-photo" aria-hidden="true"><img src="/menu-table.webp" alt="" /></div>
+      <div className="interior-layer" aria-hidden="true"><img src="/interior.webp" alt="" /><div /></div>
+      <Suspense fallback={null}><World state={state} onProgress={onProgress} /></Suspense>
+      <div className="reading-shade" aria-hidden="true" />
+      <header className="nav">
+        <a className="wordmark" href="#home" aria-label="LUME CAFE home" onClick={event => { event.preventDefault(); go(0); }}>LUME<span>CAFE · SRI LANKA</span></a>
+        <nav aria-label="Main navigation"><a href="#menu" onClick={event => { event.preventDefault(); go(4); }}>Menu</a><a className="desktop-link" href="#craft" onClick={event => { event.preventDefault(); go(3); }}>Our story</a><a className="desktop-link" href="#cafe" onClick={event => { event.preventDefault(); go(5); }}>The café</a></nav>
+        <div className="nav-actions"><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`${theme === 'dark' ? 'Light' : 'Dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button><button className="order-button" aria-label={`Your order, ${count} items`} onClick={() => setModal('order')}><ShoppingBag size={16} /><span>Your order</span><b>{count || <ArrowUpRight size={15} />}</b></button></div>
+      </header>
+
+      <section className="scene scene-hero" id="home" aria-label="Welcome to LUME">
+        <div className="hero-copy"><div className="eyebrow"><span className="tiny-line" /> COLOMBO, SRI LANKA</div><h1>CRAFTED<br />TO <em>CRAVE.</em></h1><p>From your first coffee to your last little bite.<br />Good things happen at LUME.</p><div className="hero-actions"><button className="primary" onClick={() => go(1)}>Explore the flavour <ArrowUpRight size={18} /></button><button className="text-link" onClick={() => go(4)}>View our menu</button></div><div className="hero-footnote">COFFEE. GOOD FOOD. A MOMENT FOR YOU.</div></div>
+        <div className="hero-product-note"><span>THE LUME SIGNATURE</span><strong>{current.name}</strong><span>{rupees(current.price)} <i> / </i> BLENDED WITH FEELING</span></div>
+        <div className="hero-orbit-note" aria-hidden="true">A LITTLE<br /><em>extraordinary.</em></div>
+      </section>
+      <section className="scene ingredient-scene" aria-label="Real strawberry ingredients">
+        <div className="scene-copy"><div className="eyebrow">01 / IT STARTS WITH THE REAL THING</div><h2>STRAWBERRY.<br /><em>REIMAGINED.</em></h2><p>Real strawberry. Velvet cream.<br />Ice-cold obsession.</p><div className="ingredient-notes"><span><b>01</b> Real strawberry</span><span><b>02</b> Velvet cream</span><span><b>03</b> Blended over ice</span></div></div>
+      </section>
+      <section className="scene flavour-scene" id="flavours" aria-label="Choose a signature flavour" onPointerDown={event => { if (!(event.target as HTMLElement).closest('button')) pointerStart.current = event.clientX; }} onPointerUp={event => { if (pointerStart.current !== null && Math.abs(event.clientX - pointerStart.current) > 55) changeFlavour(flavour + (event.clientX < pointerStart.current ? 1 : -1)); pointerStart.current = null; }} onPointerCancel={() => pointerStart.current = null}>
+        <div className="scene-copy"><div className="eyebrow">THREE SIGNATURES. YOUR KIND OF JOY.</div><h2>FOLLOW<br />YOUR <em>CRAVING.</em></h2><div className="flavour-detail" key={flavour}><span className="eyebrow">{current.tag}</span><h3>{current.name}</h3><p>{current.note}</p></div><div className="flavour-controls"><button className="round-control" aria-label="Previous flavour" onClick={() => changeFlavour(flavour - 1)}><ChevronLeft size={19} /></button>{flavours.map((f, index) => <button key={f.id} className={`swatch ${index === flavour ? 'selected' : ''}`} style={{ '--swatch': f.accent } as React.CSSProperties} aria-label={f.name} aria-pressed={index === flavour} onClick={() => changeFlavour(index)} />)}<button className="round-control" aria-label="Next flavour" onClick={() => changeFlavour(flavour + 1)}><ChevronRight size={19} /></button></div><button className="text-link flavour-add" onClick={() => add(menu.find(item => item.id === current.id)!)}>Add to your order <span>{rupees(current.price)}</span><Plus size={15} /></button><small>SWIPE TO DISCOVER · 0{flavour + 1} / 03</small></div>
+      </section>
+      <section className="scene craft-scene" id="craft" aria-label="Our story">
+        <CraftStory active={chapter === 3} />
+      </section>
+      <section className="scene menu-scene" id="menu" aria-label="Our café menu">
+        <div className="menu-intro"><span className="eyebrow">FROM FIRST COFFEE TO ONE MORE BITE</span><h2>MORE THAN<br /><em>YOUR USUAL.</em></h2><p>Something for slow mornings,<br />long afternoons, and every craving between.</p><img src="/menu-table.webp" alt="Flat white, croissant, chicken sourdough, chocolate cake and iced matcha" /><span className="menu-photo-caption">GOOD TOGETHER. EVEN BETTER WITH YOU.</span></div>
+        <CafeMenu onAdd={add} lastAdded={lastAdded} />
+      </section>
+      <section className="scene cafe-scene" id="cafe" aria-label="Our Colombo café">
+        <div className="cafe-copy"><span className="eyebrow">YOUR LITTLE CORNER OF COLOMBO</span><h2>STAY A LITTLE<br /><em>LONGER.</em></h2><p>A warm welcome. A good cup. A table for you.<br />Come for the coffee. Stay for the feeling.</p><button className="primary" onClick={() => setModal('visit')}>Find your LUME <ArrowUpRight size={18} /></button><div className="cafe-facts"><span><MapPin size={14} /> {cafe.neighbourhood}, {cafe.country}</span><span><Clock size={14} /> {cafe.days} · {cafe.hours}</span></div></div>
+      </section>
+      <section className="scene final-scene" aria-label="Visit LUME">
+        <div className="final-copy"><span className="eyebrow">MAKE A LITTLE TIME FOR YOURSELF</span><h2>YOUR NEXT<br /><em>FAVOURITE.</em></h2><p>We’ll put the coffee on.</p><div className="final-actions"><button className="primary" onClick={() => setModal('visit')}>Find a LUME <ArrowUpRight size={17} /></button><button className="text-link" onClick={() => go(4)}>View menu <ArrowUpRight size={16} /></button></div></div><footer><a href="#home" onClick={event => { event.preventDefault(); go(0); }}>LUME CAFE</a><span>COLOMBO · SRI LANKA</span><span>© {new Date().getFullYear()} LUME</span><button onClick={() => go(0)}>Back to the first sip ↑</button></footer>
+      </section>
+      <div className="bottom-bar"><button onClick={() => go(chapter === 6 ? 0 : chapter + 1)}>{chapter === 6 ? 'BACK TO THE FIRST SIP' : 'SCROLL TO SAVOUR'} <ArrowDown size={14} /></button><span>0{chapter + 1} <i>/</i> {chapters[chapter]}</span><nav aria-label="Journey chapters" className="chapter-dots">{chapters.map((c, i) => <button key={c} aria-label={`Go to ${c}`} aria-current={chapter === i ? 'step' : undefined} className={chapter === i ? 'active' : ''} onClick={() => go(i)} />)}</nav></div>
+      <div className="progress-line" />
+      <div className={`bag-notice ${lastAdded ? 'show' : ''}`} role="status" aria-live="polite">{lastAdded && <><Check size={15} /><span>{menu.find(item => item.id === lastAdded)?.name} added</span><button onClick={() => setModal('order')}>View order <ArrowUpRight size={13} /></button></>}</div>
+    </div>
+
+    {!ready && <LoadingRitual progress={loading} onComplete={finishLoading} />}
+
+    <Dialog open={modal !== null} onOpenChange={open => { if (!open) setModal(null); }}>
+      <DialogContent className={`lume-dialog ${modal === 'visit' ? 'visit-dialog' : ''}`} data-lenis-prevent>
+        <DialogTitle>{modal === 'visit' ? 'A little LUME in Colombo.' : 'Your café order.'}</DialogTitle>
+        <DialogDescription>{modal === 'visit' ? 'Coffee, comfort, and a seat with your name on it.' : 'Your favourites, ready for your next visit.'}</DialogDescription>
+        {modal === 'visit' ? <div className="visit-content"><img src="/interior.webp" alt="Warm café interior with timber, tropical greenery and rattan seating" /><div className="visit-details"><div><MapPin size={18} /><p><strong>{cafe.neighbourhood}</strong><span>{cafe.country}</span></p></div><div><Clock size={18} /><p><strong>{cafe.hours}</strong><span>{cafe.days}</span></p></div></div><p className="visit-note">Drop in for a coffee, make it a long lunch, or find a quiet spot for something sweet.</p><a className="primary" href={cafe.mapUrl} target="_blank" rel="noopener noreferrer">Explore Colombo 07 <ArrowUpRight size={16} /></a></div> : <div className="bag-content">
+          {selected.length ? <><div className="bag-items">{selected.map(item => <article className="bag-item" key={item.id}><div><h3>{item.name}</h3><span>{rupees(item.price)} each</span></div><div className="quantity"><button aria-label={`Remove one ${item.name}`} onClick={() => quantity(item.id, -1)}>{bag[item.id] === 1 ? <Trash2 size={14} /> : <Minus size={14} />}</button><span>{bag[item.id]}</span><button disabled={bag[item.id] >= 10} aria-label={`Add one ${item.name}`} onClick={() => quantity(item.id, 1)}><Plus size={14} /></button></div><strong>{rupees(item.price * bag[item.id])}</strong></article>)}</div><div className="bag-total"><span>Your total</span><strong>{rupees(total)}</strong></div><button className="primary copy-order" onClick={copyOrder}>{copied ? <Check size={17} /> : <Copy size={17} />}{copied ? 'Order copied' : 'Copy your order'}</button>{copyFallback && <textarea aria-label="Order text to copy" readOnly value={copyFallback} onFocus={event => event.target.select()} /> }<p className="order-note">Save your list and order at the café. Online checkout isn’t available yet; no order has been sent.</p><button className="text-link" onClick={() => { setModal(null); go(4); }}>Something else? Back to the menu <ArrowUpRight size={16} /></button></> : <div className="empty-bag"><ShoppingBag size={35} strokeWidth={1} /><h3>What are you craving?</h3><p>Find a coffee, a little bite, or your new favourite.</p><button className="primary" onClick={() => { setModal(null); go(4); }}>Explore our menu <ArrowUpRight size={16} /></button></div>}
+        </div>}
+      </DialogContent>
+    </Dialog>
+  </div>;
+}

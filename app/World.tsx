@@ -1,45 +1,166 @@
 "use client";
-import { useEffect, useRef } from "react";
-import * as THREE from "three";
-export type SceneState = {progress:number; flavour:number; reduced:boolean};
-// Product lives in a single group: replace the billboard with a GLTFLoader model here.
-export default function World({state,onProgress}:{state:React.RefObject<SceneState>;onProgress:(n:number)=>void}){
- const host=useRef<HTMLDivElement>(null);
- useEffect(()=>{
-  if(!host.current)return;
-  let renderer:THREE.WebGLRenderer;
-  try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:innerWidth>700,powerPreference:'high-performance'});}catch{onProgress(100);return;}
-  let mobile=innerWidth<700;renderer.setPixelRatio(Math.min(devicePixelRatio,mobile?1.25:1.75));host.current.appendChild(renderer.domElement);
-  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(35,1,.1,80);camera.position.z=11;
-  const manager=new THREE.LoadingManager();manager.onProgress=(_,loaded,total)=>onProgress(Math.round(loaded/total*100));manager.onError=()=>onProgress(100);
-  manager.itemStart('campaign');const campaign=new Image();campaign.onload=campaign.onerror=()=>manager.itemEnd('campaign');campaign.src='/cafe.png';
-  const texture=new THREE.TextureLoader(manager).load('/cup.png');texture.colorSpace=THREE.SRGBColorSpace;
-  const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{map:{value:texture},flavour:{value:0},opacity:{value:1}},vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:`uniform sampler2D map;uniform float flavour;uniform float opacity;varying vec2 vUv;void main(){vec4 c=texture2D(map,vUv);float mask=smoothstep(.02,.2,c.r-c.g)*smoothstep(.08,.3,c.r);float l=dot(c.rgb,vec3(.3,.59,.11));vec3 caramel=vec3(l*1.12,l*.78,l*.43);vec3 mocha=vec3(l*.53,l*.30,l*.21);vec3 target=mix(caramel,mocha,clamp(flavour-1.,0.,1.));c.rgb=mix(c.rgb,target,mask*min(flavour,1.));gl_FragColor=vec4(c.rgb,c.a*opacity);}`});
-  const product=new THREE.Group();const cup=new THREE.Mesh(new THREE.PlaneGeometry(4.4,6.6),material);product.add(cup);scene.add(product);
-  scene.add(new THREE.AmbientLight('#ffded0',2));const light=new THREE.PointLight('#ffd4ad',60);light.position.set(3,4,5);scene.add(light);
-  const ingredients=new THREE.Group();scene.add(ingredients);
-  const objects:THREE.Mesh[]=[];const red=new THREE.MeshStandardMaterial({color:'#bb252b',roughness:.37});const cream=new THREE.MeshStandardMaterial({color:'#fff3df',roughness:.45});const ice=new THREE.MeshPhysicalMaterial({color:'#e6eef1',metalness:.15,roughness:.13,transparent:true,opacity:.48});
-  const green=new THREE.MeshStandardMaterial({color:'#36552b',roughness:.7}),seedMat=new THREE.MeshStandardMaterial({color:'#edc38c',roughness:.7});
-  for(let i=0;i<(mobile?12:25);i++){let geometry:THREE.BufferGeometry=i%3===0?new THREE.BoxGeometry(.16,.18,.15):new THREE.SphereGeometry(i%3===1?.17:.045,24,20);if(i%3===1){const attr=geometry.getAttribute('position');for(let j=0;j<attr.count;j++){const y=attr.getY(j);const taper=.7+(y/.17+1)*.17;attr.setXYZ(j,attr.getX(j)*taper,y*1.35,attr.getZ(j)*taper);}geometry.computeVertexNormals();}const m=new THREE.Mesh(geometry,i%3===0?ice:i%3===1?red:cream);if(i%3===1){for(let j=0;j<5;j++){const leaf=new THREE.Mesh(new THREE.SphereGeometry(.055,8,6),green);leaf.scale.set(.55,.12,1.8);leaf.position.set(Math.cos(j*1.256)*.045,.21,Math.sin(j*1.256)*.045);leaf.rotation.y=-j*1.256;m.add(leaf);}const seeds=new THREE.InstancedMesh(new THREE.SphereGeometry(.009,5,4),seedMat,30);const dummy=new THREE.Object3D();for(let j=0;j<30;j++){const y=1-2*(j+.5)/30,a=j*2.399,r=Math.sqrt(1-y*y),taper=.7+(y+1)*.17;dummy.position.set(Math.cos(a)*r*.175*taper,y*.232,Math.sin(a)*r*.175*taper);dummy.scale.set(.6,1,.5);dummy.updateMatrix();seeds.setMatrixAt(j,dummy.matrix);}m.add(seeds);}m.userData={angle:i*2.399,radius:1.4+(i%5)*.36,z:(i%7-3)*.5};objects.push(m);ingredients.add(m);}
-  const craftGroup=new THREE.Group();scene.add(craftGroup);const beanMat=new THREE.MeshStandardMaterial({color:'#432417',roughness:.45});
-  for(let i=0;i<(mobile?10:22);i++){const bean=new THREE.Mesh(new THREE.SphereGeometry(.16,20,12),beanMat);bean.scale.set(.7,1.25,.8);bean.position.set(Math.sin(i*2.4)*5,Math.cos(i*2.4)*3.4,(i%5)-2);bean.rotation.set(i,i*.7,i*.3);const crease=new THREE.Mesh(new THREE.TorusGeometry(.105,.013,5,16,Math.PI),new THREE.MeshStandardMaterial({color:'#170c07'}));crease.rotation.z=Math.PI/2;crease.scale.set(1.5,.35,1);crease.position.z=.13;bean.add(crease);craftGroup.add(bean);}
-  const milkCurve=new THREE.CatmullRomCurve3([new THREE.Vector3(-5,-2,-3),new THREE.Vector3(-3,1,-2),new THREE.Vector3(0,2,-4),new THREE.Vector3(3,-1,-3),new THREE.Vector3(5,2,-2)]);const milk=new THREE.Mesh(new THREE.TubeGeometry(milkCurve,70,.035,7,false),cream);craftGroup.add(milk);
-  const count=mobile?90:220,positions=new Float32Array(count*3);for(let i=0;i<count;i++){positions[i*3]=Math.sin(i*19.1)*10;positions[i*3+1]=Math.cos(i*27.7)*7;positions[i*3+2]=Math.sin(i*6.7)*7;}const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(positions,3));const pm=new THREE.PointsMaterial({color:'#f1c6aa',size:.025,transparent:true,opacity:.45,depthWrite:false});const particles=new THREE.Points(pg,pm);scene.add(particles);
-  const mouse={x:0,y:0};const pointer=(e:PointerEvent)=>{mouse.x=(e.clientX/innerWidth-.5)*2;mouse.y=(e.clientY/innerHeight-.5)*2;};window.addEventListener('pointermove',pointer,{passive:true});
-  const resize=()=>{const w=innerWidth,h=innerHeight;mobile=w<700;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();};resize();window.addEventListener('resize',resize);
-  const clock=new THREE.Clock();let raf=0;
-  const frame=()=>{raf=requestAnimationFrame(frame);if(document.hidden)return;const t=clock.getElapsedTime(),p=state.current.progress*6,idle=state.current.reduced?0:t;
-   const hero=THREE.MathUtils.smoothstep(p,0,.7),craft=THREE.MathUtils.smoothstep(p,2.65,3.4),final=THREE.MathUtils.smoothstep(p,5.1,5.85);
-   product.position.x=mobile?.65:THREE.MathUtils.lerp(2.6,2.1,hero);product.position.x=THREE.MathUtils.lerp(product.position.x,0,final);product.position.y=Math.sin(idle*.65)*.07-(mobile?THREE.MathUtils.lerp(1.1,.15,final):0);
-   product.rotation.z=THREE.MathUtils.lerp(-.14,.1,hero)+Math.sin(idle*.3)*.018;product.rotation.y=Math.sin(p*2)*.12+mouse.x*.035;
-   const scale=mobile?THREE.MathUtils.lerp(.52,.37,final): .88;product.scale.setScalar(scale*(1+Math.sin(Math.min(p,3)*1.2)*.07));
-   material.uniforms.opacity.value=Math.min(hero*1.8,1)*(1-craft)*(1-THREE.MathUtils.smoothstep(p,2.55,3.1))+final;
-   material.uniforms.flavour.value=THREE.MathUtils.lerp(material.uniforms.flavour.value,state.current.flavour,.055);
-   red.color.lerp(new THREE.Color(state.current.flavour===0?'#bb252b':state.current.flavour===1?'#b87d3a':'#42251a'),.05);
-   objects.forEach((m,i)=>{const d=m.userData,a=d.angle+p*1.8+idle*.06,r=d.radius*(1+Math.sin(Math.min(p,2.5))* .65);m.position.set(Math.cos(a)*r+product.position.x,Math.sin(a)*r*.75,Math.sin(a*.8)*2);m.rotation.set(a*.7,a,a*.5);m.scale.setScalar((.45+hero*.8)*(1-final));});ingredients.visible=p> .1&&p<5.6;
-   particles.rotation.y=p*.15+idle*.012;particles.position.z=Math.sin(p)*2;pm.opacity=p>4.7?.18:.4;
-   craftGroup.visible=p>2.65&&p<4.3;craftGroup.rotation.z=p*.12;craftGroup.position.z=(p-3)*3;craftGroup.scale.setScalar(Math.min(1,Math.max(0,(p-2.65)*3),Math.max(0,(4.3-p)*2)));
-   camera.position.x=THREE.MathUtils.lerp(camera.position.x,mouse.x*.1,.035);camera.position.y=THREE.MathUtils.lerp(camera.position.y,-mouse.y*.08,.035);camera.lookAt(0,0,0);renderer.render(scene,camera);
-  };frame();return()=>{cancelAnimationFrame(raf);window.removeEventListener('resize',resize);window.removeEventListener('pointermove',pointer);scene.traverse(o=>{if(o instanceof THREE.Mesh){o.geometry.dispose();const materials=Array.isArray(o.material)?o.material:[o.material];materials.forEach(m=>m.dispose());}});texture.dispose();pg.dispose();pm.dispose();renderer.dispose();renderer.domElement.remove();};
- },[state,onProgress]);return <div ref={host} className="webgl" aria-hidden="true"/>;
+import { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+
+export type SceneState = { progress: number; flavour: number; reduced: boolean; light: boolean };
+const smooth = THREE.MathUtils.smoothstep;
+const lerp = THREE.MathUtils.lerp;
+
+/** One renderer and one product group across all chapters. Replace the plane
+ * inside product with a GLTFLoader model without changing the camera timeline. */
+export default function World({ state, onProgress }: { state: React.RefObject<SceneState>; onProgress: (n: number) => void }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [fallback, setFallback] = useState(false);
+  useEffect(() => {
+    if (!host.current) return;
+    let renderer: THREE.WebGLRenderer;
+    try { renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' }); }
+    catch { setFallback(true); onProgress(100); return; }
+    const mount = host.current;
+    mount.appendChild(renderer.domElement);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    let mobile = innerWidth < 760;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, 1, .1, 40);
+    camera.position.z = 11;
+    const manager = new THREE.LoadingManager();
+    manager.onProgress = (_, loaded, total) => onProgress(Math.round(loaded / total * 100));
+    const loader = new THREE.TextureLoader(manager);
+    const cupTextures = ['/cup.webp', '/caramel.webp', '/mocha.webp'].map(url => {
+      const texture = loader.load(url); texture.colorSpace = THREE.SRGBColorSpace; return texture;
+    });
+    const berryTexture = loader.load('/strawberry.webp');
+    berryTexture.colorSpace = THREE.SRGBColorSpace;
+    // Count real image completions; no fabricated percentage timer.
+    for (const source of ['/menu-table.webp', '/interior.webp']) {
+      manager.itemStart(source);
+      const img = new Image();
+      img.onload = img.onerror = () => manager.itemEnd(source);
+      img.src = source;
+    }
+    const cupMaterial = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false,
+      uniforms: { map: { value: cupTextures[0] }, nextMap: { value: cupTextures[0] }, blend: { value: 1 }, opacity: { value: 1 }, time: { value: 0 } },
+      vertexShader: `varying vec2 vUv; void main(){vUv=uv; vec3 p=position; p.z+=sin(uv.x*3.14159)*.08; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
+      fragmentShader: `uniform sampler2D map; uniform sampler2D nextMap; uniform float blend; uniform float opacity; uniform float time; varying vec2 vUv;
+        void main(){ vec4 c=mix(texture2D(map,vUv),texture2D(nextMap,vUv),smoothstep(0.,1.,blend));
+        float glint=pow(max(0.,1.-abs(vUv.x-(.45+sin(time*.35)*.12))*8.),8.)*.015;
+        c.rgb+=glint*step(.95,c.a); gl_FragColor=vec4(c.rgb,c.a*opacity);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        }`,
+    });
+    const product = new THREE.Group();
+    const cup = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 6.6, 24, 24), cupMaterial);
+    product.add(cup); scene.add(product);
+    // Thin spatial ribbons orbit the product, with travelling points of light.
+    const orbit = new THREE.Group(); scene.add(orbit);
+    const ribbonMaterials: THREE.LineBasicMaterial[] = [];
+    for (let ring = 0; ring < 3; ring++) {
+      const vertices = Array.from({ length: 161 }, (_, i) => {
+        const angle = i / 160 * Math.PI * 2;
+        return new THREE.Vector3(Math.cos(angle) * (2.15 + ring * .16), Math.sin(angle) * (2.15 + ring * .16), 0);
+      });
+      const material = new THREE.LineBasicMaterial({ color: '#f46b76', transparent: true, opacity: .2, depthWrite: false });
+      ribbonMaterials.push(material);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(vertices), material);
+      line.rotation.set(1.12 + ring * .18, .22 + ring * .16, -.25); orbit.add(line);
+    }
+    const droplets = new THREE.Group(); scene.add(droplets);
+    const dropGeometry = new THREE.SphereGeometry(.035, 10, 8);
+    const dropMaterial = new THREE.MeshPhysicalMaterial({ color: '#ffe2dc', metalness: .2, roughness: .13, transparent: true, opacity: .65 });
+    for (let i = 0; i < 18; i++) { const mesh = new THREE.Mesh(dropGeometry, dropMaterial); mesh.scale.setScalar(.6 + (i % 4) * .3); droplets.add(mesh); }
+    scene.add(new THREE.HemisphereLight('#fff5eb', '#4b1524', 3));
+    const keyLight = new THREE.PointLight('#fff6e8', 35); keyLight.position.set(3, 4, 5); scene.add(keyLight);
+    // Photographic berries only. No procedural fruit, cubes or marshmallow shapes.
+    const berryMaterial = new THREE.MeshBasicMaterial({ map: berryTexture, transparent: true, depthWrite: false, opacity: 0, toneMapped: false });
+    const berries = [0, 1, 2].map(i => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(.72, .68), berryMaterial.clone());
+      mesh.rotation.z = [-.35, .6, -.7][i]; scene.add(mesh); return mesh;
+    });
+    const count = 70, points = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) { points[i * 3] = Math.sin(i * 18.13) * 5; points[i * 3 + 1] = Math.cos(i * 27.17) * 3.8; points[i * 3 + 2] = -2 - (i % 5) * .3; }
+    const dustGeometry = new THREE.BufferGeometry(); dustGeometry.setAttribute('position', new THREE.BufferAttribute(points, 3));
+    const dustMaterial = new THREE.PointsMaterial({ color: '#d8c5b9', size: .012, transparent: true, opacity: .19, depthWrite: false });
+    const dust = new THREE.Points(dustGeometry, dustMaterial); scene.add(dust);
+    const pointer = { x: 0, y: 0 }, eased = { x: 0, y: 0 };
+    const move = (event: PointerEvent) => { if (event.pointerType !== 'mouse') return; pointer.x = event.clientX / innerWidth * 2 - 1; pointer.y = event.clientY / innerHeight * 2 - 1; };
+    window.addEventListener('pointermove', move, { passive: true });
+    const resize = () => {
+      mobile = innerWidth < 760;
+      renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.35 : 1.75));
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    };
+    resize(); window.addEventListener('resize', resize);
+    const lost = (event: Event) => { event.preventDefault(); setFallback(true); };
+    renderer.domElement.addEventListener('webglcontextlost', lost);
+    const palette = ['#ff7783', '#e7b367', '#bb8061'].map(color => new THREE.Color(color));
+    const clock = new THREE.Clock(); let frameId = 0, displayedFlavour = 0;
+    function draw() {
+      frameId = requestAnimationFrame(draw);
+      if (document.hidden) return;
+      const dt = Math.min(clock.getDelta(), .05), time = clock.elapsedTime;
+      const { progress, flavour, reduced, light } = state.current;
+      const p = progress * 6, idle = reduced ? 0 : time;
+      const activeFlavour = p > .55 && p < 1.45 ? 0 : flavour;
+      const ingredient = smooth(p, .3, 1), exit = smooth(p, 2.35, 2.95), final = smooth(p, 5.2, 5.85);
+      const damp = 1 - Math.exp(-dt * 4);
+      eased.x = lerp(eased.x, reduced ? 0 : pointer.x, damp); eased.y = lerp(eased.y, reduced ? 0 : pointer.y, damp);
+      const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(17.5)) * 11;
+      const viewWidth = viewHeight * camera.aspect;
+      product.position.x = lerp(mobile ? viewWidth * .17 : viewWidth * (.245 - Math.sin(Math.min(p, 2) * Math.PI / 2) * .035), mobile ? 0 : viewWidth * .23, final);
+      product.position.y = (mobile ? lerp(.68, -.18, final) : -.05) + Math.sin(idle * .9) * .20 + eased.y * -.045;
+      if (mobile && p > .5 && p < 2.8) product.position.y -= smooth(p, .4, .95) * 2.25;
+      product.rotation.z = -.08 + ingredient * .08 + Math.sin(idle * .65) * .11 + eased.x * .035 - final * .06;
+      product.rotation.y = Math.sin(idle * .6) * .30 + eased.x * .12 + Math.sin(p * 1.4) * .14;
+      product.rotation.x = Math.cos(idle * .6) * .055;
+      const short = innerHeight < 650;
+      const scale = mobile ? lerp(lerp(short ? .43 : .59, .40, smooth(p, .4, .95)), .41, final) : (short ? .77 : .88);
+      product.scale.setScalar(scale * (1 + Math.sin(Math.min(p, 2) * Math.PI / 2) * .10));
+      cupMaterial.uniforms.opacity.value = 1 - exit + final;
+      if (displayedFlavour !== activeFlavour) {
+        cupMaterial.uniforms.map.value = cupTextures[displayedFlavour];
+        cupMaterial.uniforms.nextMap.value = cupTextures[activeFlavour];
+        cupMaterial.uniforms.blend.value = 0; displayedFlavour = activeFlavour;
+      }
+      cupMaterial.uniforms.blend.value = Math.min(1, cupMaterial.uniforms.blend.value + dt * 1.6);
+      cupMaterial.uniforms.time.value = idle;
+      const worldVisibility = Math.max(1 - exit, final);
+      orbit.position.copy(product.position); orbit.position.z = -1;
+      orbit.scale.setScalar(mobile ? .65 : 1);
+      orbit.rotation.z = idle * .09 + p * .45;
+      const atmosphereColor = palette[activeFlavour];
+      ribbonMaterials.forEach(material => { material.color.lerp(atmosphereColor, damp); material.opacity = (light ? .26 : .32) * worldVisibility; });
+      droplets.children.forEach((drop, i) => {
+        const angle = idle * (.12 + i % 3 * .02) + i * 2.4 + p * .8;
+        const radius = (mobile ? 1.05 : 1.9) + Math.sin(i * 4) * .45;
+        drop.position.set(product.position.x + Math.cos(angle) * radius, product.position.y + Math.sin(angle) * radius * 1.25, -.8 + Math.sin(angle) * .5);
+      });
+      dropMaterial.opacity = worldVisibility * (light ? .45 : .8);
+      const berryOpacity = (1 - exit) * (activeFlavour === 0 ? 1 : 0) * (1 - final);
+      berries.forEach((berry, i) => {
+        const angles = [-1.15, .8, 2.5], angle = angles[i] + idle * .12 + ingredient * .7;
+        const radius = (mobile ? 1.1 : 1.65) + Math.sin(p * 1.2) * .22;
+        berry.position.set(product.position.x + Math.cos(angle) * radius, product.position.y + Math.sin(angle) * radius, -.6 - i * .28);
+        // Keep every ingredient in the product half, never through text.
+        if (!mobile) berry.position.x = Math.max(viewWidth * .06, berry.position.x);
+        berry.rotation.z = angles[i] * .3 + Math.sin(idle * .35 + i) * .07;
+        berry.scale.setScalar((mobile ? .45 : .68) + (i === 2 ? .18 : 0));
+        (berry.material as THREE.MeshBasicMaterial).opacity = berryOpacity * (i === 2 ? .7 : .95);
+      });
+      dust.rotation.z = Math.sin(idle * .035) * .1 + p * .025;
+      dustMaterial.opacity = light ? .035 : .14 * (1 - smooth(p, 3.4, 4));
+      camera.position.x = eased.x * .065; camera.position.y = -eased.y * .045; camera.lookAt(0, 0, 0);
+      renderer.render(scene, camera);
+    }
+    draw();
+    return () => {
+      cancelAnimationFrame(frameId); window.removeEventListener('resize', resize); window.removeEventListener('pointermove', move);
+      renderer.domElement.removeEventListener('webglcontextlost', lost);
+      scene.traverse(object => { if (object instanceof THREE.Mesh || object instanceof THREE.Line) { object.geometry.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach(material => material.dispose()); } });
+      cupTextures.forEach(texture => texture.dispose()); berryTexture.dispose(); berryMaterial.dispose(); dustGeometry.dispose(); dustMaterial.dispose(); renderer.dispose(); renderer.domElement.remove();
+    };
+  }, [state, onProgress]);
+  return <div className="webgl" ref={host} aria-hidden="true">{fallback && <img className="fallback-cup" src="/cup.webp" alt="" />}</div>;
 }
