@@ -29,10 +29,13 @@ export default function World({ state, onProgress }: { state: React.RefObject<Sc
     const cupTextures = ['/cup.webp', '/caramel.webp', '/mocha.webp'].map(url => {
       const texture = loader.load(url); texture.colorSpace = THREE.SRGBColorSpace; return texture;
     });
+    const explodedTextures = ['/exploded-strawberry.webp', '/exploded-caramel.webp', '/exploded-mocha.webp'].map(url => {
+      const texture = loader.load(url); texture.colorSpace = THREE.SRGBColorSpace; return texture;
+    });
     const berryTexture = loader.load('/strawberry.webp');
     berryTexture.colorSpace = THREE.SRGBColorSpace;
     // Count real image completions; no fabricated percentage timer.
-    for (const source of ['/menu-table.webp', '/interior.webp']) {
+    for (const source of ['/menu-table.webp', '/interior.webp', '/story-craft.webp', '/finale-flatlay.webp']) {
       manager.itemStart(source);
       const img = new Image();
       img.onload = img.onerror = () => manager.itemEnd(source);
@@ -40,10 +43,12 @@ export default function World({ state, onProgress }: { state: React.RefObject<Sc
     }
     const cupMaterial = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false,
-      uniforms: { map: { value: cupTextures[0] }, nextMap: { value: cupTextures[0] }, blend: { value: 1 }, opacity: { value: 1 }, time: { value: 0 } },
-      vertexShader: `varying vec2 vUv; void main(){vUv=uv; vec3 p=position; p.z+=sin(uv.x*3.14159)*.08; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
-      fragmentShader: `uniform sampler2D map; uniform sampler2D nextMap; uniform float blend; uniform float opacity; uniform float time; varying vec2 vUv;
+      uniforms: { map: { value: cupTextures[0] }, nextMap: { value: cupTextures[0] }, blend: { value: 1 }, opacity: { value: 1 }, time: { value: 0 }, reveal: { value: 0 }, expanded: { value: 0 } },
+      vertexShader: `varying vec2 vUv; varying float vRevealY; void main(){vUv=uv; vRevealY=uv.y; vec3 p=position; p.z+=sin(uv.x*3.14159)*.08; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
+      fragmentShader: `uniform sampler2D map; uniform sampler2D nextMap; uniform float blend; uniform float opacity; uniform float time; uniform float reveal; uniform float expanded; varying vec2 vUv; varying float vRevealY;
         void main(){ vec4 c=mix(texture2D(map,vUv),texture2D(nextMap,vUv),smoothstep(0.,1.,blend));
+        float opening=smoothstep(1.025-reveal*1.05-.012,1.025-reveal*1.05+.012,vRevealY);
+        c.a*=mix(1.-opening,opening,expanded);
         float glint=pow(max(0.,1.-abs(vUv.x-(.45+sin(time*.35)*.12))*8.),8.)*.015;
         c.rgb+=glint*step(.95,c.a); gl_FragColor=vec4(c.rgb,c.a*opacity);
         #include <tonemapping_fragment>
@@ -53,6 +58,28 @@ export default function World({ state, onProgress }: { state: React.RefObject<Sc
     const product = new THREE.Group();
     const cup = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 6.6, 24, 24), cupMaterial);
     product.add(cup); scene.add(product);
+    // Register the two photographs at the cup base and rim. The second image
+    // begins compressed around those anchors, then opens vertically with scroll.
+    // Both photographs share a transform throughout the hand-off: no double cup.
+    const expandedMaterial = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, fragmentShader: cupMaterial.fragmentShader,
+      vertexShader: `uniform float unfold; varying vec2 vUv; varying float vRevealY;
+        void main(){
+          vUv=uv;
+          float body=smoothstep(.37,.43,uv.y);
+          float packedY=mix(.045+uv.y*1.30,.565+(uv.y-.4)*.67,body);
+          float packedX=.515+(uv.x-.5)*mix(1.49,1.18,body);
+          vRevealY=mix(packedY,uv.y,unfold);
+          vec3 p=position;
+          p.x=(mix(packedX,uv.x,unfold)-.5)*4.4;
+          p.y=(mix(packedY,uv.y,unfold)-.5)*6.6;
+          p.z+=sin(uv.x*3.14159)*.08;
+          gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+        }`,
+      uniforms: { map: { value: explodedTextures[0] }, nextMap: { value: explodedTextures[0] }, blend: { value: 1 }, opacity: { value: 0 }, time: { value: 0 }, unfold: { value: 0 }, reveal: { value: 0 }, expanded: { value: 1 } },
+    });
+    const expandedProduct = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 6.6, 48, 96), expandedMaterial);
+    scene.add(expandedProduct);
     // Thin spatial ribbons orbit the product, with travelling points of light.
     const orbit = new THREE.Group(); scene.add(orbit);
     const ribbonMaterials: THREE.LineBasicMaterial[] = [];
@@ -103,7 +130,10 @@ export default function World({ state, onProgress }: { state: React.RefObject<Sc
       const dt = Math.min(clock.getDelta(), .05), time = clock.elapsedTime;
       const { progress, flavour, reduced, light } = state.current;
       const p = progress * 6, idle = reduced ? 0 : time;
-      const activeFlavour = p > .55 && p < 1.45 ? 0 : flavour;
+      const activeFlavour = flavour;
+      const expansion = smooth(p, .12, .40) * (1 - smooth(p, 1.35, 1.85));
+      const unfold = smooth(p, .30, .98) * (1 - smooth(p, 1.18, 1.80));
+      const staging = smooth(p, 0, .98) * (1 - smooth(p, 1.2, 1.85));
       const ingredient = smooth(p, .3, 1), exit = smooth(p, 2.35, 2.95), final = smooth(p, 5.2, 5.85);
       const damp = 1 - Math.exp(-dt * 4);
       eased.x = lerp(eased.x, reduced ? 0 : pointer.x, damp); eased.y = lerp(eased.y, reduced ? 0 : pointer.y, damp);
@@ -112,33 +142,51 @@ export default function World({ state, onProgress }: { state: React.RefObject<Sc
       product.position.x = lerp(mobile ? viewWidth * .17 : viewWidth * (.245 - Math.sin(Math.min(p, 2) * Math.PI / 2) * .035), mobile ? 0 : viewWidth * .23, final);
       product.position.y = (mobile ? lerp(.68, -.18, final) : -.05) + Math.sin(idle * .9) * .20 + eased.y * -.045;
       if (mobile && p > .5 && p < 2.8) product.position.y -= smooth(p, .4, .95) * 2.25;
-      product.rotation.z = -.08 + ingredient * .08 + Math.sin(idle * .65) * .11 + eased.x * .035 - final * .06;
+      product.rotation.z = -.08 + ingredient * .18 + Math.sin(idle * .65) * .11 + eased.x * .035 - final * .36;
       product.rotation.y = Math.sin(idle * .6) * .30 + eased.x * .12 + Math.sin(p * 1.4) * .14;
       product.rotation.x = Math.cos(idle * .6) * .055;
       const short = innerHeight < 650;
       const scale = mobile ? lerp(lerp(short ? .43 : .59, .40, smooth(p, .4, .95)), .41, final) : (short ? .77 : .88);
       product.scale.setScalar(scale * (1 + Math.sin(Math.min(p, 2) * Math.PI / 2) * .10));
-      cupMaterial.uniforms.opacity.value = 1 - exit + final;
+      cupMaterial.uniforms.opacity.value = 1 - exit;
+      cupMaterial.uniforms.reveal.value = expansion;
+      // One continuous camera-space path for the assembled and expanded cup.
+      product.position.x = lerp(product.position.x, viewWidth * (mobile ? .245 : .23), staging);
+      product.position.y = lerp(product.position.y, (mobile ? -.65 : -.02) + Math.sin(idle * .7) * .075, staging);
+      product.rotation.x = lerp(product.rotation.x, Math.sin(idle * .35) * .035, staging);
+      product.rotation.y = lerp(product.rotation.y, eased.x * .08 + Math.sin(idle * .4) * .07, staging);
+      product.rotation.z = lerp(product.rotation.z, Math.sin(idle * .45) * .025, staging);
+      product.scale.setScalar(lerp(product.scale.x, mobile ? .47 : .78, staging));
+      expandedProduct.position.copy(product.position);
+      expandedProduct.quaternion.copy(product.quaternion);
+      expandedProduct.scale.copy(product.scale);
+      expandedMaterial.uniforms.unfold.value = unfold;
+      expandedMaterial.uniforms.opacity.value = 1 - exit;
+      expandedMaterial.uniforms.reveal.value = expansion;
+      expandedMaterial.uniforms.time.value = idle;
       if (displayedFlavour !== activeFlavour) {
         cupMaterial.uniforms.map.value = cupTextures[displayedFlavour];
         cupMaterial.uniforms.nextMap.value = cupTextures[activeFlavour];
+        expandedMaterial.uniforms.map.value = explodedTextures[displayedFlavour];
+        expandedMaterial.uniforms.nextMap.value = explodedTextures[activeFlavour];
         cupMaterial.uniforms.blend.value = 0; displayedFlavour = activeFlavour;
       }
       cupMaterial.uniforms.blend.value = Math.min(1, cupMaterial.uniforms.blend.value + dt * 1.6);
+      expandedMaterial.uniforms.blend.value = cupMaterial.uniforms.blend.value;
       cupMaterial.uniforms.time.value = idle;
-      const worldVisibility = Math.max(1 - exit, final);
+      const worldVisibility = 1 - exit;
       orbit.position.copy(product.position); orbit.position.z = -1;
       orbit.scale.setScalar(mobile ? .65 : 1);
       orbit.rotation.z = idle * .09 + p * .45;
       const atmosphereColor = palette[activeFlavour];
-      ribbonMaterials.forEach(material => { material.color.lerp(atmosphereColor, damp); material.opacity = (light ? .26 : .32) * worldVisibility; });
+      ribbonMaterials.forEach(material => { material.color.lerp(atmosphereColor, damp); material.opacity = (light ? .26 : .32) * worldVisibility * (1 - expansion * .85); });
       droplets.children.forEach((drop, i) => {
         const angle = idle * (.12 + i % 3 * .02) + i * 2.4 + p * .8;
         const radius = (mobile ? 1.05 : 1.9) + Math.sin(i * 4) * .45;
         drop.position.set(product.position.x + Math.cos(angle) * radius, product.position.y + Math.sin(angle) * radius * 1.25, -.8 + Math.sin(angle) * .5);
       });
-      dropMaterial.opacity = worldVisibility * (light ? .45 : .8);
-      const berryOpacity = (1 - exit) * (activeFlavour === 0 ? 1 : 0) * (1 - final);
+      dropMaterial.opacity = worldVisibility * (light ? .45 : .8) * (1 - expansion);
+      const berryOpacity = (1 - smooth(p, .2, .65)) * (activeFlavour === 0 ? 1 : 0);
       berries.forEach((berry, i) => {
         const angles = [-1.15, .8, 2.5], angle = angles[i] + idle * .12 + ingredient * .7;
         const radius = (mobile ? 1.1 : 1.65) + Math.sin(p * 1.2) * .22;
@@ -159,7 +207,7 @@ export default function World({ state, onProgress }: { state: React.RefObject<Sc
       cancelAnimationFrame(frameId); window.removeEventListener('resize', resize); window.removeEventListener('pointermove', move);
       renderer.domElement.removeEventListener('webglcontextlost', lost);
       scene.traverse(object => { if (object instanceof THREE.Mesh || object instanceof THREE.Line) { object.geometry.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach(material => material.dispose()); } });
-      cupTextures.forEach(texture => texture.dispose()); berryTexture.dispose(); berryMaterial.dispose(); dustGeometry.dispose(); dustMaterial.dispose(); renderer.dispose(); renderer.domElement.remove();
+      [...cupTextures, ...explodedTextures].forEach(texture => texture.dispose()); berryTexture.dispose(); berryMaterial.dispose(); dustGeometry.dispose(); dustMaterial.dispose(); renderer.dispose(); renderer.domElement.remove();
     };
   }, [state, onProgress]);
   return <div className="webgl" ref={host} aria-hidden="true">{fallback && <img className="fallback-cup" src="/cup.webp" alt="" />}</div>;

@@ -10,9 +10,7 @@ export function useJourney(root: React.RefObject<HTMLDivElement | null>, state: 
   const triggerRef = useRef<ScrollTrigger | null>(null);
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
-    const media = matchMedia('(prefers-reduced-motion: reduce)');
-    state.current.reduced = media.matches;
-    const smooth = new Lenis({ duration: 1.08, smoothWheel: !media.matches, syncTouch: false, anchors: false });
+    const smooth = new Lenis({ duration: 1.08, smoothWheel: !state.current.reduced, syncTouch: false, anchors: false });
     lenis.current = smooth;
     smooth.on('scroll', ScrollTrigger.update);
     const tick = (time: number) => smooth.raf(time * 1000);
@@ -20,6 +18,7 @@ export function useJourney(root: React.RefObject<HTMLDivElement | null>, state: 
     const panels = Array.from(root.current!.querySelectorAll<HTMLElement>('.scene'));
     const atmosphere = root.current!.querySelector<HTMLElement>('.atmosphere')!;
     const interior = root.current!.querySelector<HTMLElement>('.interior-layer')!;
+    const finale = root.current!.querySelector<HTMLElement>('.finale-environment');
     const table = root.current!.querySelector<HTMLElement>('.craft-photo')!;
     let chapter = -1;
     const update = (progress: number) => {
@@ -38,9 +37,20 @@ export function useJourney(root: React.RefObject<HTMLDivElement | null>, state: 
         panel.style.transform = state.current.reduced ? 'none' : `perspective(1200px) translate3d(0,${-distance * 70}px,${-Math.abs(distance) * 90}px)`;
         panel.inert = Math.abs(distance) >= .42;
       });
-      const cafe = Math.max(0, 1 - Math.abs(p - 5) * 1.2);
-      interior.style.opacity = String(cafe);
-      interior.style.transform = `scale(${1.035 + (p - 5) * .015})`;
+      const cafe = gsap.utils.clamp(0, 1, (p - 4.25) / .65);
+      const approach = gsap.utils.clamp(0, 1, (p - 5.12) / .73);
+      const cameraTravel = approach * approach * (3 - 2 * approach);
+      interior.style.opacity = String(cafe * (1 - cameraTravel));
+      // A spatial dissolve between separately photographed compositions.
+      // Translation adds depth without magnifying either source image.
+      interior.style.setProperty('--approach', String(cameraTravel));
+      interior.style.transform = 'none';
+      const environment = interior.querySelector<HTMLElement>('.cafe-camera');
+      if (environment) environment.style.transform = `translate3d(0,${-cameraTravel * 28}px,0)`;
+      if (finale) {
+        finale.style.opacity = String(cameraTravel);
+        finale.style.transform = `translate3d(0,${(1 - cameraTravel) * 45}px,0)`;
+      }
       table.style.opacity = String(Math.max(0, 1 - Math.abs(p - 3) * 1.35));
       table.style.transform = `translate3d(${(p - 3) * -25}px,0,0) scale(${1.025 + (p - 3) * .015})`;
       atmosphere.style.opacity = String(1 - Math.max(0, 1 - Math.abs(p - 4)) * .6);
@@ -48,9 +58,7 @@ export function useJourney(root: React.RefObject<HTMLDivElement | null>, state: 
     };
     const trigger = ScrollTrigger.create({ trigger: root.current, start: 'top top', end: 'bottom bottom', invalidateOnRefresh: true, onUpdate: self => update(self.progress), onRefresh: self => update(self.progress) });
     triggerRef.current = trigger; update(trigger.progress);
-    const preference = () => { state.current.reduced = media.matches; smooth.options.smoothWheel = !media.matches; };
-    media.addEventListener('change', preference);
-    return () => { media.removeEventListener('change', preference); trigger.kill(); smooth.destroy(); gsap.ticker.remove(tick); };
+    return () => { trigger.kill(); smooth.destroy(); gsap.ticker.remove(tick); };
   }, [root, state, onChapter]);
   const go = (chapter: number) => {
     const trigger = triggerRef.current;
